@@ -1,0 +1,32 @@
+name: Build VST3 (Windows)
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -B build -A x64 -DVC_BUILD_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+      - name: Build plugin and tests
+        run: cmake --build build --config Release --parallel
+      - name: Run DSP tests
+        shell: bash
+        run: |
+          mkdir -p out
+          ./build/Release/VocalCompressorTests.exe > out/TEST_REPORT_windows.md || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+          grep "PASS" out/TEST_REPORT_windows.md | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VocalCompressor-VST3
+          path: build/VocalCompressor_artefacts/Release/VST3
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-report
+          path: out
+      - name: Fail if tests failed
+        shell: bash
+        run: '[ -z "$TESTS_FAILED" ]'
