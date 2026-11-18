@@ -1,32 +1,59 @@
+
 name: Build VST3 (Windows)
+
 on:
   push:
   pull_request:
   workflow_dispatch:
+
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Configure
-        run: cmake -B build -A x64 -DVC_BUILD_TESTS=ON -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+        run: >
+          cmake -B build -A x64
+          -DVC_BUILD_TESTS=ON
+          "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
       - name: Build plugin and tests
         run: cmake --build build --config Release --parallel
+
       - name: Run DSP tests
         shell: bash
         run: |
           mkdir -p out
-          ./build/Release/VocalCompressorTests.exe > out/TEST_REPORT_windows.md || echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
-          grep "PASS" out/TEST_REPORT_windows.md | tail -1
-      - uses: actions/upload-artifact@v4
+          ./build/Release/VocalCompressorTests.exe > out/TEST_REPORT_windows.md 2>&1
+          TEST_EXIT=$?
+          if [ "$TEST_EXIT" -ne 0 ]; then
+            echo "TESTS_FAILED=1" >> "$GITHUB_ENV"
+          fi
+          cat out/TEST_REPORT_windows.md
+          exit 0
+
+      - name: Upload VST3
+        uses: actions/upload-artifact@v4
         with:
           name: VocalCompressor-VST3
-          path: build/VocalCompressor_artefacts/Release/VST3
-      - uses: actions/upload-artifact@v4
+          path: build/VocalCompressor_artefacts/Release/VST3/
+          if-no-files-found: error
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: test-report
-          path: out
+          path: out/
+          if-no-files-found: warn
+
       - name: Fail if tests failed
+        if: always()
         shell: bash
-        run: '[ -z "$TESTS_FAILED" ]'
+        run: |
+          if [ "$TESTS_FAILED" = "1" ]; then
+            echo "DSP tests failed."
+            exit 1
+          fi
